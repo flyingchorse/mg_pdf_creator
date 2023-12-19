@@ -94,8 +94,6 @@ $doc_root = realpath(dirname($_SERVER['DOCUMENT_ROOT'].$_SERVER['SCRIPT_NAME']).
 
 $watermarkedDirectory = $doc_root . "/pdfcover/";
 
-
-
 /**
  * If we should want to watermark the images later, we'll use this
  **/
@@ -146,21 +144,6 @@ function findSharp($orig, $final) // function from Ryan Rud (http://adryrun.com)
 	return max(round($result), 0);
 } // findSharp()
 
-function getWatermarkDir() {
-  $doc_root = realpath(dirname($_SERVER['DOCUMENT_ROOT'].$_SERVER['SCRIPT_NAME']).'/..') ;
-
-
-/**
- * Directory in which we'll save all size and watermarked images.
- * Even if we don't use watermarks.
- **/
-
-$watermarkedDirectory = $doc_root . "/pdfcover/";
-
-return $watermarkedDirectory;
-}
-
-
 function imageCreateFromAny($filepath) { 
     $type = exif_imagetype($filepath); // [] if you don't have exif you could use getImageSize() 
     $allowedTypes = array( 
@@ -193,10 +176,10 @@ function imageCreateFromAny($filepath) {
  * Poorly named: Sizes original image to proper size
  * and adds watermark if needed.
  **/
-function createWatermarkedImage($imageName,$galimg){
-  
+function createWatermarkedImage($imageName){
+  global $doc_root, $watermarkedDirectory;
 
-  $originalImagePath = get_attached_file($galimg);
+  $originalImagePath = "$doc_root/gallery/original/$imageName"; 
   $image = imagecreatefromjpeg($originalImagePath);
   list($source_w,$source_h) = getimagesize($originalImagePath);
   $source_ratio = $source_w/$source_h;
@@ -235,21 +218,19 @@ function sharpenImage($destimg,$source_width, $dest_width){
 }
 
 function watermarkedImagePath($imageName){
-
-  $watermarkedDirectory =  getWatermarkDir();
-
+  global $watermarkedDirectory;
   return $watermarkedDirectory . $imageName;
 }
 
-function getWatermarkedImage($imageName,$galimg){
+function getWatermarkedImage($imageName){
   $imagePath = watermarkedImagePath($imageName);
   $image = null;
   if (!file_exists($imagePath)){
-    $image = createWatermarkedImage($imageName,$galimg);
+    $image = createWatermarkedImage($imageName);
   } else {
     $image = imagecreatefromjpeg($imagePath);
   } 
-  return $imagePath;
+  return $image;
 }
 
 
@@ -266,8 +247,6 @@ if ($_POST){
   $photographer = $_POST['photographer'];
   
 
-  $testVariable = $watermarkedDirectory;
-
   /**
    *  Code to sent email alert to client of pdf download
    * 
@@ -277,7 +256,7 @@ if ($_POST){
   //$mailmsg .= ' at host: ' . gethostbyaddr($_SERVER['REMOTE_ADDR']) . '.<br/>';
   //$mailmsg .= 'They requested ' . count($galimgs) . ' images: <br/><br/>';
 
-  $pdf = new FPDF('l','pt',array(MAX_WIDTH,MAX_HEIGHT));
+  $pdf = new FPDF('p','pt',array(MAX_WIDTH,MAX_HEIGHT));
   //$pdf = new FPDF2File('p','pt',array(MAX_WIDTH,MAX_HEIGHT));
 
   //$tmpname = $watermarkedDirectory . uniqid('pdfportfolio'. $_SERVER['REMOTE_ADDR']) . '.pdf';
@@ -288,8 +267,7 @@ if ($_POST){
 
   $pdf->SetTitle('Mark George'); 
   $pdf->SetMargins(0,0,0);
-  $bgcolor = hex2RGB($pdf_settings['pdf_cover_bg_color']);
-  $pdf->SetFillColor($bgcolor['red'],$bgcolor['green'],$bgcolor['blue']);
+
   /**
    * Use uploaded cover page, or make one with "browser title" and link to home page
    **/
@@ -304,7 +282,7 @@ if ($_POST){
     $pdf->AddPage('P',array(MAX_WIDTH,MAX_HEIGHT));
     $pdf->Image("$doc_root/gallery/pdfcovers/cover.jpg",0,0,MAX_WIDTH,MAX_HEIGHT,'jpg');
   } else {
-    $pdf->AddPage('l',array(MAX_WIDTH,MAX_HEIGHT));
+    $pdf->AddPage('P',array(MAX_WIDTH,MAX_HEIGHT));
        
 
     /** 
@@ -323,7 +301,7 @@ if ($_POST){
     $pdf->SetTextColor($textcolor['red'],$textcolor['green'],$textcolor['blue']); 
     $bgcolor = hex2RGB($pdf_settings['pdf_cover_bg_color']);
     $pdf->SetFillColor($bgcolor['red'],$bgcolor['green'],$bgcolor['blue']);
-    $pdf->Rect(0,0,MAX_WIDTH,MAX_HEIGHT,'F');
+$pdf->Rect(0,0,MAX_WIDTH,MAX_HEIGHT,F);
     $pdf->SetXY(0,200);
 
     /**
@@ -335,7 +313,7 @@ if ($_POST){
     $stringwidth = 100000;
     do { 
       $fontsize = $fontsize - 2;
-      $pdf->AddFont('Baskerville');
+      $pdf->AddFont('baskerville');
       $pdf->SetFont('Baskerville');
       $pdf->SetFontSize(58);
       $stringwidth = $pdf->GetStringWidth($pdf_settings['pdf_cover_text']);
@@ -366,41 +344,27 @@ $pdf->Link(round(MAX_WIDTH/2-$stringwidth/2),
 
 
   foreach ($galimgs as $galimg){
-     $watermarkedDirectory;
+  
       
-      //$image_name = get_attached_file($galimg);
-      $image_name = basename( get_attached_file( $galimg ) );
-      $wmImagePath = getWatermarkedImage($image_name,$galimg);
-      
+      $image_name = get_attached_file( $galimg );
+      //echo $image_name;
       settype($image_url, "string"); 
-      $image_url = $wmImagePath;
+      $image_url = $image_name;
       $image = imageCreateFromAny($image_url);
 
       $height = imagesy($image);
       $width = imagesx($image);
-       if ($width>$height) {
-        $pdf->SetFillColor($bgcolor['red'],$bgcolor['green'],$bgcolor['blue']);
-       $pdf->AddPage('l',array($width*.75,$height*.75)); 
-       $pdf->Rect(0,0,$width,$height,'F');
-       }
-      else
-       {
-        $pdf->SetFillColor($bgcolor['red'],$bgcolor['green'],$bgcolor['blue']);
-         $pdf->AddPage('p',array($width*.75,$height*.75));
-         $pdf->Rect(0,0,$width,$height,'F');
-       }
-     
+      $pdf->AddPage('P',array($width/2,$height/2));
       $startx = round((MAX_WIDTH - $width) / 2);
       $starty = round((MAX_HEIGHT - $height) / 2);
-             
+      //$wmImagePath =watermarkedImagePath($image_name);       
 
 //      $mailmsg .= "<img src='http://www.timothydevine.com/gallery/small/" . $image_name . "'  /> <br/>\n";
 //      $mailmsg .= "<hr/>";
-      //$pdf->Image($wmImagePath,0,0,MAX_WIDTH,MAX_HEIGHT,'jpg');
-       //$pdf->Image($wmImagePath,0,0,$width/2,$height/2,'jpg');
       
-      $pdf->Image($wmImagePath,0,0,$width*.75,$height*.75,'jpg');
-      
+       $pdf->Image($image_url,0,0,$width/2,$height/2,'jpg');
+      // $pdf->Cell(0,50,$width/2 . '-----' . $height/2 ,0,1,'L',false);
+      //$pdf->Image($wmImagePath,$startx,$starty,$width,$height,'jpg');
 
     
   }      
@@ -415,8 +379,8 @@ $pdf->Link(round(MAX_WIDTH/2-$stringwidth/2),
   /**
    * Name the file with the "site_title" setting with no spaces.
    **/
-   $pdfsite['site_title'] = 'Mark George';
-  $pdf->Output( preg_replace("/\s/", "", $pdfsite['site_title']) . "WebsitePortfolio.pdf",  "I");
+   $settings['site_title'] = 'Mark George';
+  $pdf->Output( preg_replace("/\s/", "", $settings['site_title']) . "WebsitePortfolio.pdf",  "I");
   //$pdf->Output(); 
   //unlink($tmpname);
 } 
